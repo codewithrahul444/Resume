@@ -8,7 +8,7 @@ class DatabaseService {
 
   async initDatabase() {
     try {
-      this.db = await SQLite.openDatabaseAsync('resumeCraftPro.db');
+      this.db = SQLite.openDatabase('resumeCraftPro.db');
       await this.createTables();
     } catch (error) {
       console.error('Database initialization error:', error);
@@ -40,54 +40,65 @@ class DatabaseService {
       );
     `;
 
-    await this.db.execAsync(createMessagesTable);
-    await this.db.execAsync(createResumesTable);
+    this.db.transaction(tx => {
+      tx.executeSql(createMessagesTable);
+      tx.executeSql(createResumesTable);
+    });
   }
 
   // Message methods
   async saveMessage(message) {
     try {
-      await this.db.runAsync(
-        'INSERT OR REPLACE INTO messages (messageId, chatId, text, user, createdAt, type, data) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [
-          message._id,
-          message.chatId || 'default',
-          message.text,
-          JSON.stringify(message.user),
-          message.createdAt,
-          message.type || 'text',
-          JSON.stringify(message.data || {})
-        ]
-      );
+      this.db.transaction(tx => {
+        tx.executeSql(
+          'INSERT OR REPLACE INTO messages (messageId, chatId, text, user, createdAt, type, data) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [
+            message._id,
+            message.chatId || 'default',
+            message.text,
+            JSON.stringify(message.user),
+            message.createdAt,
+            message.type || 'text',
+            JSON.stringify(message.data || {})
+          ]
+        );
+      });
     } catch (error) {
       console.error('Error saving message:', error);
     }
   }
 
   async getMessages(chatId = 'default', limit = 50) {
-    try {
-      const result = await this.db.getAllAsync(
-        'SELECT * FROM messages WHERE chatId = ? ORDER BY createdAt DESC LIMIT ?',
-        [chatId, limit]
-      );
-
-      return result.map(row => ({
-        _id: row.messageId,
-        text: row.text,
-        createdAt: new Date(row.createdAt),
-        user: JSON.parse(row.user),
-        type: row.type,
-        data: JSON.parse(row.data || '{}')
-      })).reverse();
-    } catch (error) {
-      console.error('Error getting messages:', error);
-      return [];
-    }
+    return new Promise((resolve, reject) => {
+      this.db.transaction(tx => {
+        tx.executeSql(
+          'SELECT * FROM messages WHERE chatId = ? ORDER BY createdAt DESC LIMIT ?',
+          [chatId, limit],
+          (_, { rows }) => {
+            const messages = rows._array.map(row => ({
+              _id: row.messageId,
+              text: row.text,
+              createdAt: new Date(row.createdAt),
+              user: JSON.parse(row.user),
+              type: row.type,
+              data: JSON.parse(row.data || '{}')
+            })).reverse();
+            resolve(messages);
+          },
+          (_, error) => {
+            console.error('Error getting messages:', error);
+            resolve([]);
+          }
+        );
+      });
+    });
   }
 
   async clearMessages(chatId = 'default') {
     try {
-      await this.db.runAsync('DELETE FROM messages WHERE chatId = ?', [chatId]);
+      this.db.transaction(tx => {
+        tx.executeSql('DELETE FROM messages WHERE chatId = ?', [chatId]);
+      });
     } catch (error) {
       console.error('Error clearing messages:', error);
     }
@@ -96,40 +107,50 @@ class DatabaseService {
   // Resume methods
   async saveResume(resume) {
     try {
-      await this.db.runAsync(
-        'INSERT OR REPLACE INTO resumes (resumeId, title, data, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?)',
-        [
-          resume.id,
-          resume.title,
-          JSON.stringify(resume),
-          resume.createdAt || Date.now(),
-          Date.now()
-        ]
-      );
+      this.db.transaction(tx => {
+        tx.executeSql(
+          'INSERT OR REPLACE INTO resumes (resumeId, title, data, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?)',
+          [
+            resume.id,
+            resume.title,
+            JSON.stringify(resume),
+            resume.createdAt || Date.now(),
+            Date.now()
+          ]
+        );
+      });
     } catch (error) {
       console.error('Error saving resume:', error);
     }
   }
 
   async getResumes() {
-    try {
-      const result = await this.db.getAllAsync(
-        'SELECT * FROM resumes ORDER BY updatedAt DESC'
-      );
-
-      return result.map(row => ({
-        ...JSON.parse(row.data),
-        localId: row.id
-      }));
-    } catch (error) {
-      console.error('Error getting resumes:', error);
-      return [];
-    }
+    return new Promise((resolve, reject) => {
+      this.db.transaction(tx => {
+        tx.executeSql(
+          'SELECT * FROM resumes ORDER BY updatedAt DESC',
+          [],
+          (_, { rows }) => {
+            const resumes = rows._array.map(row => ({
+              ...JSON.parse(row.data),
+              localId: row.id
+            }));
+            resolve(resumes);
+          },
+          (_, error) => {
+            console.error('Error getting resumes:', error);
+            resolve([]);
+          }
+        );
+      });
+    });
   }
 
   async deleteResume(resumeId) {
     try {
-      await this.db.runAsync('DELETE FROM resumes WHERE resumeId = ?', [resumeId]);
+      this.db.transaction(tx => {
+        tx.executeSql('DELETE FROM resumes WHERE resumeId = ?', [resumeId]);
+      });
     } catch (error) {
       console.error('Error deleting resume:', error);
     }

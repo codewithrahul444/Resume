@@ -5,7 +5,7 @@ echo "🚀 Pushing Resume Craft Pro Mobile App to GitHub..."
 
 # Set GitHub credentials
 export GIT_USERNAME="codewithrahul444"
-export GIT_TOKEN="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"
+export GIT_TOKEN="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"
 export REPO_URL="https://${GIT_USERNAME}:${GIT_TOKEN}@github.com/codewithrahul444/Resume.git"
 
 # Configure git
